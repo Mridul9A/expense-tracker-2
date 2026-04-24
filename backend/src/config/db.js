@@ -1,11 +1,17 @@
 import Database from "better-sqlite3";
+import fs from "fs";
 import path from "path";
 
-const dbPath = process.env.DB_PATH || path.join("data", "expenses.db");
+const dbPath = process.env.DB_PATH || "data/expenses.db";
+
+// ✅ Ensure directory exists
+const dir = path.dirname(dbPath);
+if (!fs.existsSync(dir)) {
+  fs.mkdirSync(dir, { recursive: true });
+}
 
 const db = new Database(dbPath);
 
-// create table
 db.exec(`
   CREATE TABLE IF NOT EXISTS expenses (
     id TEXT PRIMARY KEY,
