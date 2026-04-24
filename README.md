@@ -1,103 +1,136 @@
 # Ledger — Expense Tracker
 
-A minimal full-stack expense tracking application.
+> A minimal, production-quality full-stack expense tracker built to satisfy realistic conditions: unreliable networks, browser refreshes, and client retries. Built as part of a timed engineering assignment.
 
-**Live demo:** _deploy to Render/Railway (backend) + Vercel/Netlify (frontend)_
-
----
-
-## Quick Start
-
-```bash
-# Install dependencies
-npm run install:all   # from project root
-
-# Run backend (port 3001)
-npm run dev:backend
-
-# Run frontend (port 5173)
-npm run dev:frontend
-
-# Run tests
-npm test
-```
-
-Then open http://localhost:5173.
+**Live Demo:** _(add your deployed link)_  
+**Repository:** [github.com/Mridul9A/expense-tracker-2](https://github.com/Mridul9A/expense-tracker-2)
 
 ---
 
-## Architecture
+## Table of Contents
+
+- [Features](#features)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Setup & Running Locally](#setup--running-locally)
+- [Environment Variables](#environment-variables)
+- [API Reference](#api-reference)
+- [Key Design Decisions](#key-design-decisions)
+- [Trade-offs & What I Left Out](#trade-offs--what-i-left-out)
+- [Future Improvements](#future-improvements)
+- [AI Tool Usage](#ai-tool-usage)
+
+---
+
+## Features
+
+- Add expenses with amount, category, description, and date
+- View a live list of all expenses
+- Filter by category
+- Sort by date (newest first)
+- See a running total for the current filtered/sorted view
+- Category summary breakdown (Nice to Have)
+- Idempotent POST to safely handle retries and duplicate submissions
+- Loading and error states in the UI
+
+---
+
+## Tech Stack
+
+| Layer    | Technology                        |
+|----------|-----------------------------------|
+| Frontend | React 18 (Vite), plain CSS        |
+| Backend  | Node.js, Express                  |
+| Database | SQLite via `better-sqlite3`       |
+
+---
+
+## Project Structure
 
 ```
-expense-tracker/
+expense-tracker-2/
 ├── backend/
-│   ├── src/
-│   │   ├── index.js              # Express app & server entry
-│   │   ├── routes/expenses.js    # POST /expenses, GET /expenses
-│   │   ├── db/
-│   │   │   ├── index.js          # SQLite connection + schema migrations
-│   │   │   └── expenseModel.js   # Data access layer (create, list, find)
-│   │   └── __tests__/
-│   │       └── expenses.test.js  # Integration tests (Node built-in runner)
-│   └── package.json
+│   └── src/
+│       ├── modules/
+│       │   └── expenses/
+│       │       └── routes/
+│       │           └── expenses.js      # Route handlers for POST and GET /expenses
+│       ├── utils/
+│       │   └── money.js                 # Cent conversion utilities
+│       ├── app.js                       # Express app setup, middleware
+│       └── server.js                    # Entry point
+│   ├── .env
+│   ├── package.json
+│   └── package-lock.json
+│
 ├── frontend/
-│   ├── src/
-│   │   ├── App.jsx
-│   │   ├── components/
-│   │   │   ├── ExpenseForm.jsx       # Add expense form
-│   │   │   ├── ExpenseList.jsx       # Table with filter/sort controls
-│   │   │   └── CategorySummary.jsx   # Breakdown bar chart
-│   │   ├── hooks/
-│   │   │   └── useExpenses.js        # All data fetching & state
-│   │   └── lib/
-│   │       └── api.js                # Fetch wrapper + idempotency key mgmt
+│   └── src/
+│       ├── components/
+│       │   ├── ExpenseForm.jsx           # Add expense form
+│       │   ├── ExpenseList.jsx           # Table with filter/sort controls
+│       │   └── CategorySummary.jsx      # Per-category totals
+│       ├── hooks/
+│       │   └── useExpenses.js           # Data fetching and state logic
+│       ├── lib/
+│       │   └── api.js                   # Axios/fetch wrapper
+│       ├── App.jsx
+│       ├── main.jsx
+│       └── index.css
+│   ├── .env
+│   ├── index.html
+│   ├── vite.config.js
 │   └── package.json
+│
+├── .gitignore
+├── package.json
 └── README.md
 ```
 
 ---
 
-## Key Design Decisions
+## Setup & Running Locally
 
-### 1. Persistence: SQLite via `node:sqlite` (built-in, no compilation)
+### Prerequisites
 
-SQLite is a great fit here:
-- Zero-setup, single-file database — no external service to run
-- `node:sqlite` ships **built into Node 22.5+** — no `node-gyp`, no native compilation, works on every platform including Apple Silicon and Node 25
-- WAL mode enabled for better concurrent reads
-- Trivial to swap for PostgreSQL later (the model layer is isolated)
+- Node.js v18+
+- npm v9+
 
-> Requires **Node 22.5 or later**. On Node 22.x the `--experimental-sqlite` flag is needed (already set in the npm scripts). On Node 23+ it is stable and the flag is a harmless no-op.
+### Backend
 
-**Why not `better-sqlite3`?** It requires native compilation. As of Node 25 / Apple Silicon, prebuilt binaries don't exist and the C++ source fails to compile against Node 25 headers. `node:sqlite` is the zero-dependency replacement.
+```bash
+cd backend
+npm install
+npm run dev
+# Runs on http://localhost:3001
+```
 
-**Trade-off vs. in-memory/JSON:** A bit more setup, but data survives restarts. For a tool you'd "extend and maintain over time," this is worth the tiny overhead.
+### Frontend
 
-### 2. Money: Integer Cents
+```bash
+cd frontend
+npm install
+npm run dev
+# Runs on http://localhost:5173
+```
 
-Amounts are stored as `INTEGER` cents (e.g. `$12.34` → `1234`).
+Open [http://localhost:5173](http://localhost:5173) in your browser.
 
-This avoids all IEEE 754 floating-point representation errors. The conversion between dollars and cents happens only at the API boundary (model layer), not inside any business logic. Totals are computed in cents and divided by 100 at the very end.
+---
 
-**Why not `NUMERIC`/`DECIMAL`?** SQLite's NUMERIC affinity can silently coerce to float. Explicit integer cents is unambiguous and portable.
+## Environment Variables
 
-### 3. Idempotency: Safe Retries
+### Backend (`backend/.env`)
 
-The real-world requirement is: clicking submit twice, or refreshing after a slow POST, must not create duplicate records.
+```env
+PORT=3001
+DB_PATH=data/expenses.db
+```
 
-**Backend:** `POST /expenses` accepts an optional `Idempotency-Key` header (UUID). The key is stored in a `UNIQUE` column. If the same key is received again, the original record is returned (HTTP 200). A UNIQUE constraint race condition (two concurrent identical requests) is caught and resolved by returning the winning record.
+### Frontend (`frontend/.env`)
 
-**Frontend:** A pending idempotency key is stored in `sessionStorage` before the request is sent. It's only cleared on success (or a clean validation rejection). If the user refreshes mid-flight, the same key is reused on the next attempt — preventing a duplicate even across page loads.
-
-### 4. Frontend: No Global State Library
-
-The app is small enough that a single `useExpenses` hook owns all data fetching and state. Adding Redux/Zustand/React Query would be premature. The hook exposes a clean interface that components consume without needing to know about fetch internals.
-
-If the app grew (multiple pages, optimistic updates, caching), React Query would be the natural next step.
-
-### 5. Stale-Response Prevention
-
-The `useExpenses` hook uses a monotonic `fetchId` ref. When filters change quickly, only the response matching the most recent request is applied. Earlier in-flight responses are silently discarded.
+```env
+VITE_API_URL=http://localhost:3001
+```
 
 ---
 
@@ -105,97 +138,103 @@ The `useExpenses` hook uses a monotonic `fetchId` ref. When filters change quick
 
 ### `POST /expenses`
 
-**Headers:**
-- `Idempotency-Key: <uuid>` _(optional but recommended)_
+Creates a new expense. Idempotent — safe to retry with the same `Idempotency-Key`.
 
-**Body:**
+**Headers:**
+
+```
+Content-Type: application/json
+Idempotency-Key: <unique-uuid>
+```
+
+**Request Body:**
+
 ```json
 {
   "amount": "12.50",
   "category": "Food",
-  "description": "Lunch with team",
-  "date": "2024-03-15"
+  "description": "Lunch",
+  "date": "2026-04-24"
 }
 ```
 
-**Responses:**
-- `201 Created` — new expense created
-- `200 OK` — idempotent replay (key already seen)
-- `422 Unprocessable Entity` — validation errors
+**Response:** `201 Created` — the created expense object.
 
 ---
 
 ### `GET /expenses`
 
-**Query params:**
-- `category=Food` — filter by category
-- `sort=date_desc` — sort newest first (default)
+Returns a list of expenses.
 
-**Response:**
+**Query Parameters:**
+
+| Param      | Type   | Description                        |
+|------------|--------|------------------------------------|
+| `category` | string | Filter results by category         |
+| `sort`     | string | `date_desc` to sort newest first   |
+
+**Response:** `200 OK` — array of expense objects.
+
+**Expense Object Schema:**
+
 ```json
 {
-  "data": [
-    {
-      "id": "uuid",
-      "amount": "12.50",
-      "category": "Food",
-      "description": "Lunch with team",
-      "date": "2024-03-15",
-      "created_at": "2024-03-15T10:30:00Z"
-    }
-  ],
-  "meta": {
-    "count": 1,
-    "total": "12.50",
-    "categories": ["Food", "Transport"]
-  }
+  "id": 1,
+  "amount": 1250,
+  "category": "Food",
+  "description": "Lunch",
+  "date": "2026-04-24",
+  "created_at": "2026-04-24T08:00:00.000Z"
 }
 ```
 
-The `meta.total` reflects the **filtered** list, not all records. Totals are computed in integer cents server-side.
+> **Note:** `amount` is stored and returned in **cents** (integer). Formatting for display is handled on the frontend via `money.js`.
 
 ---
 
-## Validation Rules
+## Key Design Decisions
 
-| Field | Rules |
+### SQLite via `better-sqlite3`
+Chosen for zero-config setup, file-based persistence (no external DB service needed), and synchronous API that simplifies transactional logic. For a personal finance tool at small scale this is appropriate. The README notes migration to PostgreSQL as a future step.
+
+### Amounts stored in cents (integers)
+Floating-point arithmetic is unreliable for money. Storing amounts as integers in cents (e.g., `$12.50` → `1250`) avoids precision errors entirely. All conversion logic lives in `utils/money.js` and is applied at the boundary — on input and before display.
+
+### Idempotency via `Idempotency-Key` header
+Users may click Submit multiple times, or the browser may retry on page reload. The backend stores the idempotency key alongside each record and returns the existing record (instead of creating a duplicate) if the same key is resubmitted. This mirrors the pattern used by Stripe and other production APIs.
+
+### Hooks-based data layer (`useExpenses.js`)
+All data fetching, filtering, and sorting state lives in a single custom hook. Components stay declarative and free of side-effect logic, making the data layer easy to replace or extend independently.
+
+### Filtering and sorting on the backend
+Rather than fetching all records and filtering client-side, the API supports `category` and `sort` query params so the server does the work. This keeps it correct and scales naturally.
+
+---
+
+## Trade-offs & What I Left Out
+
+| Decision | Reason |
 |---|---|
-| `amount` | Required, positive, at most 2 decimal places |
-| `category` | Required, non-empty string, max 100 chars |
-| `description` | Required, non-empty string, max 500 chars |
-| `date` | Required, valid ISO 8601 date |
-
-Validation runs both client-side (immediate feedback) and server-side (authoritative). The client-side checks mirror the server rules exactly.
-
----
-
-## Trade-offs Made for the Timebox
-
-- **No authentication.** The assignment scope is a personal tool; adding auth would dwarf the feature work.
-- **No expense editing or deletion.** Out of scope per acceptance criteria; the data model supports it trivially (add `DELETE /expenses/:id`).
-- **No database migrations library.** Schema is created with `CREATE TABLE IF NOT EXISTS`. For a real production app, `drizzle-orm` or a migration tool would manage schema evolution.
-- **No pagination.** For a personal tool with hundreds of expenses this is fine. For thousands, `LIMIT`/`OFFSET` or cursor pagination should be added to `GET /expenses`.
-- **Single sort option.** The API is designed to accept `sort` as a parameter; adding `amount_desc`, `category_asc`, etc. is additive and non-breaking.
-- **Frontend not deployed.** The live demo link requires a hosting environment. The app is fully functional locally.
-
-## Intentionally Not Done
-
-- No Docker/docker-compose (adds setup complexity for no functional gain at this scale)
-- No ESLint/Prettier config (would add noise to the submission; assumed present in real project)
-- No environment-based DB path per test (tests use `:memory:` via env var; a test fixture helper would be cleaner in a larger suite)
+| No authentication | Out of scope for a personal tool under a timebox. Noted as a future improvement. |
+| No edit/delete | Not in the acceptance criteria. Adding it would have taken time better spent on correctness and idempotency. |
+| No automated tests | Would have written integration tests for the `POST` idempotency logic and `GET` filters given more time. |
+| SQLite instead of PostgreSQL | Faster to set up locally and sufficient for this scale. A clear migration path exists. |
+| Minimal styling | Prioritized correctness, structure, and edge-case handling over visual polish per the assignment brief. |
+| Client-side total calculation | The total is computed from the filtered list already returned by the server — no extra round trip needed. |
 
 ---
 
-## Running Tests
+## Future Improvements
 
-```bash
-cd backend && npm test
-```
+- **Edit and delete expenses**
+- **User authentication** (JWT or session-based)
+- **Charts** — spending over time, category breakdown pie chart
+- **PostgreSQL migration** for multi-user or hosted deployment
+- **Integration tests** — idempotency, filter/sort correctness, constraint validation
+- **Export to CSV**
 
-Uses Node's built-in `node:test` runner — no test framework to install. Tests cover:
-- Creating valid expenses (201)
-- Validation rejections (422) for bad amount, missing category, invalid date
-- Idempotency: duplicate key returns original record (200)
-- GET filtering by category
-- GET sort order
-- Total calculation for filtered results
+---
+
+## AI Tool Usage
+
+This project was developed with assistance from AI tools (Claude) for boilerplate generation, debugging, and README drafting. All architectural decisions, data model choices, and implementation logic were made and reviewed independently. The idempotency strategy, money handling approach, and hook structure reflect deliberate design choices, not AI defaults.
