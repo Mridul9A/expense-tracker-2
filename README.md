@@ -2,7 +2,7 @@
 
 > A minimal, production-quality full-stack expense tracker built to satisfy realistic conditions: unreliable networks, browser refreshes, and client retries. Built as part of a timed engineering assignment.
 
-**Live Demo:** _(add your deployed link)_  
+**Live Demo:** [expense-tracker-2-liart.vercel.app](https://expense-tracker-2-liart.vercel.app/)  
 **Repository:** [github.com/Mridul9A/expense-tracker-2](https://github.com/Mridul9A/expense-tracker-2)
 
 ---
